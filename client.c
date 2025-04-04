@@ -56,7 +56,7 @@ static int create_socket(void)
   addr.sin_family = AF_INET;
   if (inet_pton(AF_INET, server_addr, &addr.sin_addr) != 1) {
     printf("Invalid server address: %s\n", server_addr);
-    close(fd);
+    chat_app_close_handle(fd);
     return -1;
   }
   addr.sin_port = htons(server_port);
@@ -64,7 +64,7 @@ static int create_socket(void)
   printf("Connecting to %s:%hu...\n", server_addr, server_port);
   if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
     perror("connect");
-    close(fd);
+    chat_app_close_handle(fd);
     return -1;
   }
 
@@ -89,7 +89,7 @@ static int init_client_ctx(struct client_ctx *ctx)
 static void destroy_client_ctx(struct client_ctx *ctx)
 {
   if (ctx->tcp_fd >= 0)
-    close(ctx->tcp_fd);
+    chat_app_close_handle(ctx->tcp_fd);
 }
 
 static int poll_for_events(struct client_ctx *ctx)

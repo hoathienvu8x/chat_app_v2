@@ -13,6 +13,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
 #include <arpa/inet.h>
 
 #define MAX_MSG_LEN 4096
@@ -48,6 +49,20 @@ enum {
 #ifndef offsetof
   #define offsetof(type, member) ((size_t) &((type *)0)->member)
 #endif
+
+#define chat_app_alloc(sz, mem) calloc(sz, mem)
+#define chat_app_dealloc(p) { \
+  if (p) free(p);             \
+  p = NULL;                   \
+}
+#define chat_app_close_handle(fd) { \
+  if (                              \
+    shutdown(fd, SHUT_RDWR) == 0 && \
+    close(fd) == 0                  \
+  ) {                               \
+    fd = -1;                        \
+  }                                 \
+}
 
 struct packet {
   uint8_t    type;

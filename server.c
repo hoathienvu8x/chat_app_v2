@@ -51,7 +51,7 @@ static int create_socket(void)
   const char *tmp, *bind_addr;
   struct sockaddr_in addr;
   uint16_t bind_port;
-  int fd;
+  int fd, on = 1;
 
   fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
   if (fd < 0) {
@@ -59,8 +59,8 @@ static int create_socket(void)
     return -1;
   }
 
-  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
-  setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &(int){1}, sizeof(int));
+  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+  setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
 
   bind_addr = getenv("CHAT_APP_BIND_ADDR");
   if (!bind_addr)
@@ -76,20 +76,20 @@ static int create_socket(void)
   addr.sin_family = AF_INET;
   if (inet_pton(AF_INET, bind_addr, &addr.sin_addr) != 1) {
     printf("Invalid bind address: %s\n", bind_addr);
-    close(fd);
+    chat_app_close_handle(fd);
     return -1;
   }
   addr.sin_port = htons(bind_port);
 
   if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-    perror("bind");
-    close(fd);
+    perror("bind()");
+    chat_app_close_handle(fd);
     return -1;
   }
 
   if (listen(fd, 10) < 0) {
-    perror("listen");
-    close(fd);
+    perror("listen()");
+    chat_app_close_handle(fd);
     return -1;
   }
 
@@ -105,7 +105,7 @@ static int init_server_ctx(struct server_ctx *ctx)
   if (!ctx->db) {
     ctx->db = fopen(db_file_name, "wb+");
     if (!ctx->db) {
-      perror("fopen");
+      perror("fopen()");
       return -1;
     }
 
@@ -120,20 +120,20 @@ static int init_server_ctx(struct server_ctx *ctx)
     return -1;
   }
 
-  ctx->fds = calloc(NR_CLIENTS + 1, sizeof(*ctx->fds));
+  ctx->fds = chat_app_alloc(NR_CLIENTS + 1, sizeof(*ctx->fds));
   if (!ctx->fds) {
-    perror("calloc");
+    perror("chat_app_alloc()");
     fclose(ctx->db);
-    close(ctx->tcp_fd);
+    chat_app_close_handle(ctx->tcp_fd);
     return -1;
   }
 
-  ctx->clients = calloc(NR_CLIENTS, sizeof(*ctx->clients));
+  ctx->clients = chat_app_alloc(NR_CLIENTS, sizeof(*ctx->clients));
   if (!ctx->clients) {
-    perror("calloc");
+    perror("chat_app_alloc()");
     fclose(ctx->db);
-    close(ctx->tcp_fd);
-    free(ctx->fds);
+    chat_app_close_handle(ctx->tcp_fd);
+    chat_app_dealloc(ctx->fds);
     return -1;
   }
 
@@ -156,13 +156,13 @@ static void destroy_server_ctx(struct server_ctx *ctx)
     fclose(ctx->db);
 
   if (ctx->tcp_fd >= 0)
-    close(ctx->tcp_fd);
+    chat_app_close_handle(ctx->tcp_fd);
 
   if (ctx->fds)
-    free(ctx->fds);
+    chat_app_dealloc(ctx->fds);
 
   if (ctx->clients)
-    free(ctx->clients);
+    chat_app_dealloc(ctx->clients);
 }
 
 static int poll_for_events(struct server_ctx *ctx)
@@ -175,7 +175,7 @@ static int poll_for_events(struct server_ctx *ctx)
     if (ret == EINTR)
       return 0;
 
-    perror("poll");
+    perror("poll()");
     return -1;
   }
 
@@ -194,9 +194,9 @@ static int sync_client_chat_history(struct server_ctx *ctx, struct client_state 
   static const size_t meta_len = offsetof(struct packet_msg_id, msg.msg);
   struct packet *pkt;
 
-  pkt = malloc(sizeof(*pkt));
+  pkt = chat_app_alloc(1, sizeof(*pkt));
   if (!pkt) {
-    perror("malloc");
+    perror("chat_app_alloc()");
     return -1;
   }
 
@@ -229,13 +229,13 @@ static int sync_client_chat_history(struct server_ctx *ctx, struct client_state 
     send_len = PKT_HDR_LEN + body_len;
     ret = send(cs->fd, pkt, send_len, 0);
     if (ret < 0) {
-      perror("send");
-      free(pkt);
+      perror("send()");
+      chat_app_dealloc(pkt);
       return -1;
     }
   }
 
-  free(pkt);
+  chat_app_dealloc(pkt);
   return 0;
 }
 
@@ -249,9 +249,9 @@ static int broadcast_leave_notification(struct server_ctx *ctx, struct client_st
   ssize_t ret;
   uint32_t i;
 
-  pkt = malloc(sizeof(*pkt));
+  pkt = chat_app_alloc(1, sizeof(*pkt));
   if (!pkt) {
-    perror("malloc");
+    perror("chat_app_alloc()");
     return -1;
   }
 
@@ -272,13 +272,13 @@ static int broadcast_leave_notification(struct server_ctx *ctx, struct client_st
     }
   }
 
-  free(pkt);
+  chat_app_dealloc(pkt);
   return 0;
 }
 
 static void close_client(struct server_ctx *ctx, uint32_t idx)
 {
-  close(ctx->clients[idx].fd);
+  chat_app_close_handle(ctx->clients[idx].fd);
   ctx->clients[idx].fd = -1;
   broadcast_leave_notification(ctx, &ctx->clients[idx]);
 
@@ -295,9 +295,9 @@ static int broadcast_join_notification(struct server_ctx *ctx, struct client_sta
   ssize_t ret;
   uint32_t i;
 
-  pkt = malloc(sizeof(*pkt));
+  pkt = chat_app_alloc(1, sizeof(*pkt));
   if (!pkt) {
-    perror("malloc");
+    perror("chat_app_alloc()");
     return -1;
   }
 
@@ -318,7 +318,7 @@ static int broadcast_join_notification(struct server_ctx *ctx, struct client_sta
     }
   }
 
-  free(pkt);
+  chat_app_dealloc(pkt);
   return 0;
 }
 
@@ -376,14 +376,14 @@ static int accept_new_connection(struct server_ctx *ctx)
     if (ret == EINTR || ret == EAGAIN)
       return 0;
 
-    perror("accept");
+    perror("accept()");
     return -1;
   }
 
   ret = plug_client_in(ctx, fd, &addr);
   if (ret < 0) {
     printf("Client slot is full, dropping a new connection...\n");
-    close(fd);
+    chat_app_close_handle(fd);
     return 0;
   }
 
@@ -398,7 +398,7 @@ static int save_cl_pkt_msg_to_db(struct server_ctx *ctx,
   fwrite(msg_id, write_len, 1, ctx->db);
 
   if (ferror(ctx->db)) {
-    perror("fwrite");
+    perror("fwrite()");
     return -1;
   }
 
@@ -415,9 +415,9 @@ static int broadcast_message(struct server_ctx *ctx, struct client_state *from,
   ssize_t ret;
   uint32_t i;
 
-  pkt = malloc(sizeof(*pkt) + msg_len_he);
+  pkt = chat_app_alloc(1, sizeof(*pkt) + msg_len_he);
   if (!pkt) {
-    perror("malloc");
+    perror("chat_app_alloc()");
     return -1;
   }
 
@@ -438,7 +438,7 @@ static int broadcast_message(struct server_ctx *ctx, struct client_state *from,
     }
   }
 
-  free(pkt);
+  chat_app_dealloc(pkt);
   return 0;
 }
 
@@ -455,9 +455,9 @@ static int handle_cl_pkt_msg(struct server_ctx *ctx, struct client_state *cs)
     return -1;
   }
 
-  msg_id = malloc(sizeof(*msg_id) + msg_len_he);
+  msg_id = chat_app_alloc(1, sizeof(*msg_id) + msg_len_he);
   if (!msg_id) {
-    perror("malloc");
+    perror("chat_app_alloc()");
     return -1;
   }
 
@@ -470,13 +470,13 @@ static int handle_cl_pkt_msg(struct server_ctx *ctx, struct client_state *cs)
   msg_id->msg.msg[msg_len_he - 1] = '\0';
   ret = save_cl_pkt_msg_to_db(ctx, msg_id, wr_len);
   if (ret < 0) {
-    free(msg_id);
+    chat_app_dealloc(msg_id);
     return -1;
   }
 
   printf("%s said: %s\n", id, msg_id->msg.msg);
   broadcast_message(ctx, cs, msg_id, msg_len_he);
-  free(msg_id);
+  chat_app_dealloc(msg_id);
   return 0;
 }
 
