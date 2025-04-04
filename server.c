@@ -39,7 +39,7 @@ static uint16_t default_bind_port = 8787;
 
 static const char *stringify_ip4(struct sockaddr_in *addr)
 {
-  static char buf[INET_ADDRSTRLEN + sizeof(":65535")];
+  static char buf[INET_ADDRSTRLEN + INET_PORTSTRLEN];
 
   inet_ntop(AF_INET, &addr->sin_addr, buf, sizeof(buf));
   sprintf(buf + strlen(buf), ":%hu", ntohs(addr->sin_port));

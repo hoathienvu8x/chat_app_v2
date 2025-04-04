@@ -38,7 +38,7 @@ static int create_socket(void)
 
   fd = socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) {
-    perror("socket");
+    perror("socket()");
     return -1;
   }
 
@@ -63,7 +63,7 @@ static int create_socket(void)
 
   printf("Connecting to %s:%hu...\n", server_addr, server_port);
   if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-    perror("connect");
+    perror("connect()");
     chat_app_close_handle(fd);
     return -1;
   }
@@ -102,7 +102,7 @@ static int poll_for_events(struct client_ctx *ctx)
     if (ret == EINTR)
       return 0;
 
-    perror("poll");
+    perror("poll()");
     return -1;
   }
 
@@ -198,7 +198,7 @@ static int handle_server_packet(struct client_ctx *ctx)
     if (ret == EAGAIN || ret == EINTR)
       return 0;
 
-    perror("recv");
+    perror("recv()");
     return -1;
   }
 
@@ -224,7 +224,7 @@ static int send_message_to_server(struct client_ctx *ctx, size_t len)
   send_len = prep_cl_pkt_msg(pkt, ctx->msg, len);
   ret = send(ctx->tcp_fd, pkt, send_len, 0);
   if (ret < 0) {
-    perror("send");
+    perror("send()");
     return -1;
   }
 
